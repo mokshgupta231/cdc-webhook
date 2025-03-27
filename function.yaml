@@ -11,12 +11,6 @@ spec:
       profile: XS
   runtime: nodejs20
   env:
-    - name: PUBLISHER_URL
-      value: "http://eventing-event-publisher-proxy.kyma-system/publish"
-    - name: EVENT_SOURCE
-      value: "/default/sap.kyma.custom/cdc.1"
-    - name: EVENT_TYPE
-      value: "sap.kyma.custom.cdc.subscription.updated.v1"
     - name: CDC_API_KEY
       valueFrom:
         secretKeyRef:
