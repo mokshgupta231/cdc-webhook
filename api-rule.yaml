@@ -1,7 +1,7 @@
 apiVersion: gateway.kyma-project.io/v2alpha1
 kind: APIRule
 metadata:
-  name: cdc-subscription-webhook
+  name: cdc-webhook
   namespace: ceer-cdc
 spec:
   gateway: kyma-system/kyma-gateway
@@ -18,5 +18,5 @@ spec:
   hosts:
     - ceer-cdc-nag
   service:
-    name: cdc-subscription-webhook
+    name: cdc-webhook
     port: 80

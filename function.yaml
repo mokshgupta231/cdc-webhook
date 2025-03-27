@@ -1,10 +1,10 @@
 apiVersion: serverless.kyma-project.io/v1alpha2
 kind: Function
 metadata:
-  name: cdc-subscription-webhook
+  name: cdc-webhook
   namespace: ceer-cdc
   labels:
-    app: cdc-subscription-webhook
+    app: cdc-webhook
 spec:
   resourceConfiguration:
     function:
@@ -21,27 +21,27 @@ spec:
       valueFrom:
         secretKeyRef:
           key: CDC_API_KEY
-          name: cdc-subscription-webhook-secret
+          name: cdc-webhook-secret
     - name: CDC_KID
       valueFrom:
         secretKeyRef:
           key: CDC_KID
-          name: cdc-subscription-webhook-secret
+          name: cdc-webhook-secret
     - name: CDC_N_MODULUS
       valueFrom:
         secretKeyRef:
           key: CDC_N_MODULUS
-          name: cdc-subscription-webhook-secret
+          name: cdc-webhook-secret
     - name: CDC_E_EXPONENT
       valueFrom:
         secretKeyRef:
           key: CDC_E_EXPONENT
-          name: cdc-subscription-webhook-secret
+          name: cdc-webhook-secret
   source:
     inline:
       dependencies: |
         {
-          "name": "cdc-subscription-webhook",
+          "name": "cdc-webhook",
           "version": "1.0.0",
           "main": "server.mjs",
           "type": "module",
@@ -80,37 +80,7 @@ spec:
 
         const processEvents = async function(events) {
           console.log("events: ", JSON.stringify(events));
-          for (const [key, event] of Object.entries(events)) {
-            await processEvent(event);
-          }
         }
-
-        const processEvent = async function(event) {
-          if (event.type === "subscriptionUpdated") {
-
-            const ce = new CloudEvent({
-              id: event.id,
-              type: process.env.EVENT_TYPE,
-              source: process.env.EVENT_SOURCE,
-              data: event.data,
-              datacontenttype: "application/json"
-            });
-
-            const message = HTTP.structured(ce);
-
-            var publishResponse = await axios({
-              method: "post",
-              url: process.env.PUBLISHER_URL,
-              data: message.body,
-              headers: message.headers
-            });
-
-            if (publishResponse && publishResponse.config) {
-              console.log(publishResponse.config.data);
-            }
-
-          }
-        };
 
         export async function main(event, context) {
 
