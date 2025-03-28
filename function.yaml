@@ -64,7 +64,6 @@ spec:
           try {
             const cert = getPem(nModulus, eExponent);
             const payload = jwt.verify(sigJwt, cert, { algorithms: ["RS256"] });
-            console.log("Verified payload: ", JSON.stringify(payload));
             return true;
           } catch (err) {
             console.error("Error verifying JWT: ", err);
@@ -73,51 +72,69 @@ spec:
         };
 
         const processEvents = (events) => {
-          console.log("Processing events: ", JSON.stringify(events));
+          const getCircularReplacer = () => {
+            const seen = new WeakSet();
+            return (key, value) => {
+              if (typeof value === "object" && value !== null) {
+                if (seen.has(value)) {
+                  return;
+                }
+                seen.add(value);
+              }
+              return value;
+            };
+          };
+          
+          console.log("Processing events: ", JSON.stringify(events, getCircularReplacer()));
         };
 
         export async function main(event, context) {
           const { CDC_N_MODULUS, CDC_E_EXPONENT } = process.env;
           const res = event.extensions.response;
 
-          if (!event) return res.status(400);
-
-          const headers = event.extensions.request.headers;
-          const sigJwt = headers["x-gigya-sig-jwt"];
-
-          if (!sigJwt) return res.status(400);
-
-          const decoded = jwt.decode(sigJwt, { complete: true });
-
-          let nModulus = CDC_N_MODULUS;
-          let eExponent = CDC_E_EXPONENT;
-
-          if (!decoded?.header?.kid) {
-            console.error("JWT missing 'kid'");
-            return res.status(400);
-          }
-
           try {
-            const { data } = await getJWTPublicKey();
-            if (data?.statusCode === 200) {
-              const key = data.keys.find((key) => key.kid === decoded.header.kid);
-              if (key) {
-                nModulus = key.n;
-                eExponent = key.e;
-              }
+            if (!event) return res.status(400).json({ error: "No event provided" });
+
+            const headers = event.extensions.request.headers;
+            const sigJwt = headers["x-gigya-sig-jwt"];
+
+            if (!sigJwt) return res.status(400).json({ error: "Missing JWT signature" });
+
+            const decoded = jwt.decode(sigJwt, { complete: true });
+
+            if (!decoded?.header?.kid) {
+              console.error("JWT missing 'kid'");
+              return res.status(400).json({ error: "Invalid JWT: missing kid" });
             }
-          } catch (err) {
-            console.error("Error fetching JWT public key: ", err);
-            return res.status(400);
-          }
 
-          if (!verifyJWT(sigJwt, nModulus, eExponent)) {
-            return res.status(400);
-          }
+            let nModulus = CDC_N_MODULUS;
+            let eExponent = CDC_E_EXPONENT;
 
-          if (event.data?.events) {
-            processEvents(event.data.events);
-          }
+            try {
+              const { data } = await getJWTPublicKey();
+              if (data?.statusCode === 200) {
+                const key = data.keys.find((key) => key.kid === decoded.header.kid);
+                if (key) {
+                  nModulus = key.n;
+                  eExponent = key.e;
+                }
+              }
+            } catch (err) {
+              console.error("Error fetching JWT public key: ", err);
+              // Continue with env vars if public key fetch fails
+            }
 
-          return res.status(200);
+            if (!verifyJWT(sigJwt, nModulus, eExponent)) {
+              return res.status(400).json({ error: "JWT verification failed" });
+            }
+
+            if (event.data?.events) {
+              processEvents(event.data.events);
+            }
+
+            return res.status(200).json({ success: true });
+          } catch (error) {
+            console.error("Unhandled error:", error);
+            return res.status(500).json({ error: "Internal server error" });
+          }
         }
