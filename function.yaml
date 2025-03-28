@@ -67,6 +67,7 @@ spec:
         export async function main(event, context) {
           var nModulus = process.env.CDC_N_MODULUS;
           var eExponent = process.env.CDC_E_EXPONENT;
+          const res = event.extensions.response;
 
           if (event) {
             const headers = event.extensions.request.headers;
@@ -77,17 +78,22 @@ spec:
 
             if (decoded.header.kid !== process.env.CDC_KID) {
               console.log("Invalid kid: ", decoded.header.kid);
+              res.status(400);
               return;
             }
 
             var verified = await verifyJWT(sigJwt, nModulus, eExponent);
 
-            if (verified && event.data.events) {
+            if (!verified) {
+              res.status(400);
+              return;
+            }
+
+            if (event.data.events) {
               await processEvents(event.data.events);
             }
           }
 
-          const res = event.extensions.response;
           res.status(200);
           return;
         }
