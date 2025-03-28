@@ -52,9 +52,9 @@ spec:
 
         const getJWTPublicKey = async () => {
           const response = await axios.get(
-            "https://accounts.us1.gigya.com/accounts.getJWTPublicKey",
+            "https://accounts.gigya.com/accounts.getJWTPublicKey",
             {
-              params: { apiKey: process.env.CDC_API_KEY, V2: "true" },
+              params: { apiKey: process.env.CDC_API_KEY, V2: true },
             }
           );
           return response;
