@@ -77,7 +77,7 @@ spec:
         };
 
         export async function main(event, context) {
-          const { CDC_N_MODULUS, CDC_E_EXPONENT, CDC_KID } = process.env;
+          const { CDC_N_MODULUS, CDC_E_EXPONENT } = process.env;
           const res = event.extensions.response;
 
           if (!event) return res.status(400);
@@ -87,25 +87,28 @@ spec:
 
           if (!sigJwt) return res.status(400);
 
+          const decoded = jwt.decode(sigJwt, { complete: true });
+
           let nModulus = CDC_N_MODULUS;
           let eExponent = CDC_E_EXPONENT;
 
-          const decoded = jwt.decode(sigJwt, { complete: true });
+          if (!decoded?.header?.kid) {
+            console.error("JWT missing 'kid'");
+            return res.status(400);
+          }
 
-          if (CDC_KID !== decoded?.header?.kid) {
-            try {
-              const { data } = await getJWTPublicKey();
-              if (data?.statusCode === 200) {
-                const key = data.keys.find((key) => key.kid === CDC_KID);
-                if (key) {
-                  nModulus = key.n;
-                  eExponent = key.e;
-                }
+          try {
+            const { data } = await getJWTPublicKey();
+            if (data?.statusCode === 200) {
+              const key = data.keys.find((key) => key.kid === decoded.header.kid);
+              if (key) {
+                nModulus = key.n;
+                eExponent = key.e;
               }
-            } catch (err) {
-              console.error("Error fetching JWT public key: ", err);
-              return res.status(400);
             }
+          } catch (err) {
+            console.error("Error fetching JWT public key: ", err);
+            return res.status(400);
           }
 
           if (!verifyJWT(sigJwt, nModulus, eExponent)) {
