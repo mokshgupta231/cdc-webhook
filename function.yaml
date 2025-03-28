@@ -41,7 +41,7 @@ spec:
           "type": "module",
           "dependencies": {
             "jsonwebtoken": "^9.0.2",
-            "rsa-pem-from-mod-exp": "^0.8.6",
+            "rsa-pem-from-mod-exp": "^0.8.6"
           }
         }
       source: |
