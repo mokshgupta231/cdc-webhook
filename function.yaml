@@ -89,7 +89,7 @@ spec:
         };
 
         export async function main(event, context) {
-          const { CDC_N_MODULUS, CDC_E_EXPONENT } = process.env;
+          const { CDC_N_MODULUS, CDC_E_EXPONENT, CDC_KID } = process.env;
           const res = event.extensions.response;
 
           try {
@@ -110,17 +110,23 @@ spec:
             let nModulus = CDC_N_MODULUS;
             let eExponent = CDC_E_EXPONENT;
 
-            try {
-              const { data } = await getJWTPublicKey();
-              if (data?.statusCode === 200) {
-                const key = data.keys.find((key) => key.kid === decoded.header.kid);
-                if (key) {
-                  nModulus = key.n;
-                  eExponent = key.e;
+            if (decoded.header.kid !== CDC_KID) {
+              try {
+                const { data } = await getJWTPublicKey();
+                if (data?.statusCode === 200) {
+                  const key = data.keys.find((key) => key.kid === decoded.header.kid);
+                  if (key) {
+                    nModulus = key.n;
+                    eExponent = key.e;
+                  } else {
+                    console.error("No matching key found in public key response");
+                    return res.status(400).json({ error: "JWT verification failed - no matching key" });
+                  }
                 }
+              } catch (err) {
+                console.error("Error fetching JWT public key: ", err);
+                return res.status(400).json({ error: "Failed to fetch public key" });
               }
-            } catch (err) {
-              console.error("Error fetching JWT public key: ", err);
             }
 
             if (!verifyJWT(sigJwt, nModulus, eExponent)) {
