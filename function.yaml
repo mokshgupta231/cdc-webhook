@@ -121,7 +121,6 @@ spec:
               }
             } catch (err) {
               console.error("Error fetching JWT public key: ", err);
-              // Continue with env vars if public key fetch fails
             }
 
             if (!verifyJWT(sigJwt, nModulus, eExponent)) {
