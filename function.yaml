@@ -11,6 +11,16 @@ spec:
       profile: XS
   runtime: nodejs20
   env:
+  - name: CDC_API_KEY
+    valueFrom:
+      secretKeyRef:
+        key: CDC_API_KEY
+        name: cdc-webhook-secret
+  - name: CDC_KID
+    valueFrom:
+      secretKeyRef:
+        key: CDC_KID
+        name: cdc-webhook-secret
   - name: CDC_N_MODULUS
     valueFrom:
       secretKeyRef:
@@ -30,60 +40,82 @@ spec:
           "main": "server.mjs",
           "type": "module",
           "dependencies": {
+            "axios": "^1.8.4",
             "jsonwebtoken": "^9.0.2",
             "rsa-pem-from-mod-exp": "^0.8.6"
           }
         }
       source: |
+        import axios from "axios";
         import jwt from "jsonwebtoken";
         import getPem from "rsa-pem-from-mod-exp";
 
-        const verifyJWT = async function (sigJwt, nModulus, eExponent) {
+        const getJWTPublicKey = async () => {
+          const response = await axios.get(
+            "https://accounts.us1.gigya.com/accounts.getJWTPublicKey",
+            {
+              params: { apiKey: process.env.CDC_API_KEY, V2: "true" },
+            }
+          );
+          return response;
+        };
+
+        const verifyJWT = (sigJwt, nModulus, eExponent) => {
           try {
             const cert = getPem(nModulus, eExponent);
             const payload = jwt.verify(sigJwt, cert, { algorithms: ["RS256"] });
             console.log("Verified payload: ", JSON.stringify(payload));
             return true;
           } catch (err) {
-            console.log("Error verifying the JWT: ", JSON.stringify(err));
+            console.error("Error verifying JWT: ", err);
             return false;
           }
         };
 
-        const processEvents = async function (events) {
-          console.log("events: ", JSON.stringify(events));
+        const processEvents = (events) => {
+          console.log("Processing events: ", JSON.stringify(events));
         };
 
         export async function main(event, context) {
-          var nModulus = process.env.CDC_N_MODULUS;
-          var eExponent = process.env.CDC_E_EXPONENT;
+          const { CDC_N_MODULUS, CDC_E_EXPONENT, CDC_KID } = process.env;
           const res = event.extensions.response;
 
-          if (event) {
-            const headers = event.extensions.request.headers;
-            var sigJwt = headers["x-gigya-sig-jwt"];
+          if (!event) return res.status(400);
 
-            console.log("x-gigya-sig-jwt:", sigJwt);
-            var decoded = jwt.decode(sigJwt, { complete: true });
+          const headers = event.extensions.request.headers;
+          const sigJwt = headers["x-gigya-sig-jwt"];
 
-            if (decoded.header.kid !== process.env.CDC_KID) {
-              console.log("Invalid kid: ", decoded.header.kid);
-              res.status(400);
-              return;
-            }
+          if (!sigJwt) return res.status(400);
 
-            var verified = await verifyJWT(sigJwt, nModulus, eExponent);
+          console.log("x-gigya-sig-jwt:", sigJwt);
+          let nModulus = CDC_N_MODULUS;
+          let eExponent = CDC_E_EXPONENT;
 
-            if (!verified) {
-              res.status(400);
-              return;
-            }
+          const decoded = jwt.decode(sigJwt, { complete: true });
 
-            if (event.data.events) {
-              await processEvents(event.data.events);
+          if (CDC_KID !== decoded?.header?.kid) {
+            try {
+              const { data } = await getJWTPublicKey();
+              if (data?.statusCode === 200) {
+                const key = data.keys.find((key) => key.kid === CDC_KID);
+                if (key) {
+                  nModulus = key.n;
+                  eExponent = key.e;
+                }
+              }
+            } catch (err) {
+              console.error("Error fetching JWT public key: ", err);
+              return res.status(400);
             }
           }
 
+          if (!verifyJWT(sigJwt, nModulus, eExponent)) {
+            return res.status(400);
+          }
+
+          if (event.data?.events) {
+            processEvents(event.data.events);
+          }
+
           res.status(200);
-          return;
         }
