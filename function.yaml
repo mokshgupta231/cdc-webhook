@@ -87,7 +87,6 @@ spec:
 
           if (!sigJwt) return res.status(400);
 
-          console.log("x-gigya-sig-jwt:", sigJwt);
           let nModulus = CDC_N_MODULUS;
           let eExponent = CDC_E_EXPONENT;
 
