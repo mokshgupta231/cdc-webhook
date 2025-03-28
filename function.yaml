@@ -11,21 +11,16 @@ spec:
       profile: XS
   runtime: nodejs20
   env:
-    - name: CDC_KID
-      valueFrom:
-        secretKeyRef:
-          key: CDC_KID
-          name: cdc-webhook-secret
-    - name: CDC_N_MODULUS
-      valueFrom:
-        secretKeyRef:
-          key: CDC_N_MODULUS
-          name: cdc-webhook-secret
-    - name: CDC_E_EXPONENT
-      valueFrom:
-        secretKeyRef:
-          key: CDC_E_EXPONENT
-          name: cdc-webhook-secret
+  - name: CDC_N_MODULUS
+    valueFrom:
+      secretKeyRef:
+        key: CDC_N_MODULUS
+        name: cdc-webhook-secret
+  - name: CDC_E_EXPONENT
+    valueFrom:
+      secretKeyRef:
+        key: CDC_E_EXPONENT
+        name: cdc-webhook-secret
   source:
     inline:
       dependencies: |
