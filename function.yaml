@@ -40,30 +40,18 @@ spec:
           "main": "server.mjs",
           "type": "module",
           "dependencies": {
-            "axios": "^1.8.4",
             "jsonwebtoken": "^9.0.2",
             "rsa-pem-from-mod-exp": "^0.8.6",
-            "cloudevents": "^8.0.2"
           }
         }
       source: |
-        import axios from "axios";
         import jwt from "jsonwebtoken";
         import getPem from "rsa-pem-from-mod-exp";
-        import { HTTP, CloudEvent } from "cloudevents";
-
-        const getJWTPublicKey = async function() {
-          return await axios({
-            method: "get",
-            url: "https://accounts.us1.gigya.com/accounts.getJWTPublicKey",
-            params: { apiKey: process.env.CDC_API_KEY, V2: "true" }
-          });
-        }
 
         const verifyJWT = async function (sigJwt, nModulus, eExponent) {
           try {
             const cert = getPem(nModulus, eExponent);
-            const payload = await jwt.verify(sigJwt, cert, { algorithms: ["RS256"] });
+            const payload = jwt.verify(sigJwt, cert, { algorithms: ["RS256"] });
             console.log("Verified payload: ", JSON.stringify(payload));
             return true;
           } catch (err) {
@@ -72,59 +60,34 @@ spec:
           }
         };
 
-        const processEvents = async function(events) {
+        const processEvents = async function (events) {
           console.log("events: ", JSON.stringify(events));
-        }
+        };
 
         export async function main(event, context) {
+          var nModulus = process.env.CDC_N_MODULUS;
+          var eExponent = process.env.CDC_E_EXPONENT;
 
-            var nModulus = process.env.CDC_N_MODULUS;
-            var eExponent = process.env.CDC_E_EXPONENT;
+          if (event) {
+            const headers = event.extensions.request.headers;
+            var sigJwt = headers["x-gigya-sig-jwt"];
 
-            if (event) {
+            console.log("x-gigya-sig-jwt:", sigJwt);
+            var decoded = jwt.decode(sigJwt, { complete: true });
 
-              const headers = event.extensions.request.headers;
-              var sigJwt = headers["x-gigya-sig-jwt"];
-
-              if (sigJwt) {
-
-                console.log("x-gigya-sig-jwt:", sigJwt);
-                var decoded = await jwt.decode(sigJwt, { complete: true });
-                // Start - validate kid and update nModulus & eExponent
-                if (process.env.CDC_KID !== decoded.header.kid) {
-
-                  var getJWTPublicKeyResponse = await getJWTPublicKey();
-
-                  if (getJWTPublicKeyResponse && getJWTPublicKeyResponse.status === 200 
-                    && getJWTPublicKeyResponse.data && getJWTPublicKeyResponse.data.statusCode === 200) {
-                      for (const [key, value] of Object.entries(getJWTPublicKeyResponse.data.keys)) {
-                        if (process.env.CDC_KID === value.kid) {
-                          nModulus = value.n;
-                          eExponent =  value.e;
-                          break;
-                        }
-                      }
-                  }
-
-                }
-                // End - validate kid and update nModulus & eExponent
-
-                // Start - verify the JWT
-                var verified = await verifyJWT(sigJwt, nModulus, eExponent);
-                // End - verify the JWT
-
-                // Start - Send events to event mesh queue
-                if (verified && event.data.events) {
-                  await processEvents(event.data.events);
-                }
-                // End - Send events to event mesh queue
-
-              }
-
+            if (decoded.header.kid !== process.env.CDC_KID) {
+              console.log("Invalid kid: ", decoded.header.kid);
+              return;
             }
 
-            const res = event.extensions.response;
-            res.status(200);
-            return;
+            var verified = await verifyJWT(sigJwt, nModulus, eExponent);
 
+            if (verified && event.data.events) {
+              await processEvents(event.data.events);
+            }
           }
+
+          const res = event.extensions.response;
+          res.status(200);
+          return;
+        }
